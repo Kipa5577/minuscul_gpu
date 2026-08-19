@@ -1,5 +1,106 @@
 import py4hw 
 from ..memory.memory import TrinagleInfo
+import math
+
+'''
+                
++--------------+      +-----------+
+| RenderModule |------|Memory     |
+|              |      +-----------+
+|              |
+|              |      +-----------+
+|              |------|Screen     |
+|              |      +-----------+
++--------------+
+
+Parameters of the renderer:
+Reset: To Reinitialise this component
+First_Triangle_Address: To read the triangle points and color in memory 
+Number_of_Triangles: To know when to stop
+Camera_position: This is to know were to draw the image form 
+Camera_Target: This is were the camera is looking 
+
+Rotation_Matrix_X: This is to be reviewed because I would want the renderer to create a frame in functions of the parameters past in the entrence
+Rotation_Matrix_Y: This is to be reviewed because I would want the renderer to create a frame in function of the  parameters passed to i
+Screen: This is th inteface to communicate directly to the screen
+Done: To signal to the screen that the image is done and to change the buffer that is displayed 
+
+USED TO Know the size and the dimention of the screen to know how many rendering elements to instanciate
+SCREEN_WIDTH:
+SCREEN_HEIGHT: 
+
+
+inside the renderer:
+
+
+      +----------+
+      |Controller|
+      +----------+
+
+These could be implemented autside the component maybe 
+                   +---------------------+
+Rotation_Matrix_X->|Matrix_Multiplication|
+                   |                     |---->Model_Matrix--|
+Rotation_Matrix_Y->|                     |                   |   
+                   +---------------------+                   |                                      +---------------------+
+                                                             |------------------------------------->|Matrix_Multiplication|
+                   +---------------------+                                                          |                     |
+Camera_pos-------->|Create_look_at_matrix|                                                          |                     |---->MVP_matrix
+                   |                     |                                                    |---->|                     |
+Camera_target----->|                     |---->view_matrix------|                             |     +---------------------+
+                   |                     |                      |                             |
+up_dir ----------->|                     |                      |   +---------------------+   |
+                   +---------------------+                      |-->|Matrix_Multiplication|   |
+                                                                    |                     |---|
+                   +-------------------------+                      |                     |
+fov_deg ---------->|Create_perspective_matrix|                  |-->|                     |
+                   |                         |                  |   +---------------------+
+aspect_ratio------>|                         |                  |  
+                   |                         |---->porj_matrix--|
+near-------------->|                         |
+                   |                         |
+far -------------->|                         |
+                   +-------------------------+
+In the for each triangle loop
+               +---------------------+
+Model_Matix--->|Matrix_Multiplication|
+               |                     |-----> V1_World
+TriangleV1---->|                     |
+               +---------------------+
+            
+               +---------------------+
+Model_Matrix-->|Matrix_Multiplication|
+               |                     |-----> V1_World 
+TriangleV2---->|                     |
+               +---------------------+
+               
+               +---------------------+
+Model _Matrix->|Matrix_Multiplication|
+               |                     |-----> V1_Wold
+TriangleV3---->|                     |
+               +---------------------+
+
+               +---------------------+
+MVP_matrix---->|Matrix_Multiplication|
+               |                     |---->p1
+TriangleV1---->|                     |
+               +---------------------+
+               
+               +---------------------+
+MVP_matrix---->|Matrix_Multiplication|
+               |                     |---->p2
+TriangleV2---->|                     |
+               +---------------------+
+               
+               +---------------------+
+MVP_matrix---->|Matrix_Multiplication|
+               |                     |---->p3
+TriangleV3---->|                     |
+               +---------------------+ 
+'''     
+
+
+
 
 '''
 This component takes a position on the screen and a triangle and tells if the pixel is in the triangle or not
@@ -14,7 +115,7 @@ STATES:
 '''
 
 class RenderModule(py4hw.Logic):
-    def __init__(self,parent,name,memory_BUFFER,TRIANGLE_ADDRESS,IMAGE_POSITION_X,IMAGE_POSITION_Y,DONE):
+    def __init__(self,parent,name,Triangle:MemoryInterface,Screen:MemoryInterface,DONE,FIRST_TRIANGLE_ADDRESS,NUMBER_OF_TRIANGLES,DONE):
         super().__init__(self,parent)
 
         self.triangle = self.addIn("TRIANGLE_ADDRESS",TRIANGLE_ADDRESS)
@@ -48,11 +149,15 @@ class RenderModule(py4hw.Logic):
                 #self.v1Z = yield
                 break
 
+
             case 1:
                 break                
 
+
             case 2:
                 break
+
+
 
 
 class BoundingBoxCalculator(py4hw.Logic):
@@ -179,7 +284,6 @@ class MatixMultiplier4x4(py4hw.Logic):
         V32 = self.A.V30.get()*self.B.V02.get() + self.A.V31.get()*self.B.V12.get() + self.A.V32.get()*self.B.V22.get() + self.A.V33.get()*self.B.V32.get()
         V33 = self.A.V30.get()*self.B.V03.get() + self.A.V31.get()*self.B.V13.get() + self.A.V32.get()*self.B.V23.get() + self.A.V33.get()*self.B.V33.get()
     
-
         #Assigning values to the output matrix R
         self.R.V00.prepare(V00) 
         self.R.V01.prepare(V01)
@@ -199,4 +303,124 @@ class MatixMultiplier4x4(py4hw.Logic):
         self.R.V33.prepare(V33)
 
 
+class CrossProduct(py4hw.Logic):
+    def __init__(self,parent,name,x1,y1,z1,x2,y2,z2,rx,ry,rz):
+        super().__init__(self,parent,name)
+        self.x1 = self.addIn('X1',x1)
+        self.y1 = self.addIn('Y1',y1)
+        self.z1 = self.addIn('Z1',z1)
+        self.x2 = self.addIn('X2',x2)
+        self.y2 = self.addIn('Y2',y2)
+        self.z2 = self.addIn('Z2',z2)
+
+        self.rx = self.addOut('RX',rx)
+        self.ry = self.addOut('RY',ry)
+        self.rz = self.addOut('RZ',rz)
+
+    def propagate(self):
+        #cross product formula
+        self.rx.put(self.y1.get()*self.z2.get() - self.z1.get()*self.y2.get())
+        self.ry.put(self.z1.get()*self.x2.get() - self.x1.get()*self.z2.get())
+        self.rz.put(self.x1.get()*self.y2.get() - self.y1.get()*self.x2.get())
+
+
+
+class Vector3Norm(py4hw.Logic):
+    def __init__(self, parent, name,x,y,z,norm):
+        super().__init__(parent, name,)
+
+        self.x = self.addIn('X',x) 
+        self.y = self.addIn('Y',y)
+        self.z = self.addIn('Z',z)
+
+        self.norm = self.addOut('norm',norm)
+
+    def propagate(self):
+
+        self.norm.put(math.sqrt((self.x.get()**2)+(self.y.get()**2)+(self.z.get()**2)))
+
+
+
+class ClipToScreenConvertor(py4hw.Logic): # Converts clip space to screen space
+    def __init__(self, parent, name,x,y,z,x_scr,y_scr,depth,SCREEN_WIDTH:int,SCREEN_HEIGHT:int):
+        super().__init__(parent, name)
+
+        self.x = self.addIn('x',x)
+        self.y = self.addIn('y',y)
+        self.z = self.addIn('z',z)
+
+        self.x_scr = self.addIn('rx',x_scr)
+        self.y_scr = self.addIn('ry',y_scr)
+        self.depth = self.addIn('rz',depth)
+
+    def propagate(self):
+        self.x_src.put((((self.x.get()/self.z.get())*0.5)+0.5)*SCREEN_WIDTH)
+        self.y_src.put((1.0 - ((self.x.get() / self.z.get())*0.5 +0.5)) * SCREEN_HEIGHT)
+        self.depth.put(self.y.get()/self.z.get())
+
+
+
+
+class PixelDrawerController(py4hw.Logic):
+    def __init__(self,parent,name,triangle:TrinagleInfo,Triangle_color,SCREEN_WIDTH:int,SCREEN_HEIGHT:int):
+        super().__init__(parent,name)
+
+        self.triangle = self.addInterfaceSink('triangle',triangle)
+        self.Triangle_color = self.addIn('Triangle_color',Triangle_color)
+
+        #Bounding Box
+        self.Xmin = self.wire('Xmin',32)
+        self.Xmax = self.wire('Xmax',32)
+        self.Ymin = self.wire('Ymin',32)
+        self.Ymax = self.wire('Ymax',32)
+        self.Zmin = self.wire('Zmin',32)
+        self.Zmax = self.wire('Zmax',32)
+
+        BoundingBoxCalculator(self,'BoundingBoxCalculator',self.triangle,self.Xmin,self.Xmax,self.Ymin,self.Ymax,self.Zmin,self.Zmax)
+
+
+
+class PixelDrawer16x16(py4hw.Logic): 
+    def __init__(self,parent,name,x_offset,y_offset,triangle:TriangleInfo,Triangle_color):
+        super().__init__(parent,name):
+        '''
+        This component tests the corners of the drawing window to save on computation 
+        '''
+    
+        PixelDraw4x4('Draw1',x_offset=x_offset,y_offset=y_offset,triangle=triangle,Triangle_color=Triangle_color)
+        PixelDraw4x4('Draw2',x_offset=x_offset+4,y_offset=y_offset,triangle=triangle,Triangle_color=Triangle_color)
+        PixelDraw4x4('Draw3',x_offset=x_offset,y_offset=y_offset+4,triangle=triangle,Triangle_color=Triangle_color)
+        PixelDraw4x4('Draw4',x_offset=x_offset+4,y_offset=y_offset+4,triangle=triangle,Triangle_color=Trinagle_color)
+
+
+        
+
+class PixelDraw4x4(py4hw.Logic):
+    def __init__(self, parent, name,x_offset,y_offset,triangle:TrinagleInfo,Triangle_color):
+        super().__init__(parent, name)
+
+        '''
+        array of pixels chekers
+        '''
+
+        self.res = []
+        for i in range(4*4):
+            self.res[i] =  self.wire(f'Res{i}',1)
+        
+        pixelInTriangle(self,'Test1',x_offset,y_offset,0,triangle,self.res[0])
+        pixelInTriangle(self,'Test2',x_offset+1,y_offset,0,triangle,self.res[1])
+        pixelInTriangle(self,'Test3',x_offset,y_offset+1,0,triangle,self.res[2])
+        pixelInTriangle(self,'Test4',x_offset+1,y_offset+1,0,triangle,self.res[3])
+        pixelInTriangle(self,'Test5',x_offset+2,y_offset,0,triangle,self.res[4])
+        pixelInTriangle(self,'Test6',x_offset+3,y_offset,0,triangle,self.res[5])
+        pixelInTriangle(self,'Test7',x_offset+2,y_offset+1,0,triangle,self.res[6])
+        pixelInTriangle(self,'Test8',x_offset+3,y_offset+1,0,triangle,self.res[7])
+        pixelInTriangle(self,'Test9',x_offset,y_offset+2,0,triangle,self.res[8])
+        pixelInTriangle(self,'Test10',x_offset+1,y_offset+2,0,triangle,self.res[9])
+        pixelInTriangle(self,'Test11',x_offset,y_offset+3,0,triangle,self.res[10])
+        pixelInTriangle(self,'Test12',x_offset+1,y_offset+3,0,triangle,self.res[11])
+        pixelInTriangle(self,'Test13',x_offset+2,y_offset+2,0,triangle,self.res[12])
+        pixelInTriangle(self,'Test14',x_offset+3,y_offset+2,0,triangle,self.res[13])
+        pixelInTriangle(self,'Test15',x_offset+2,y_offset+3,0,triangle,self.res[14])
+        pixelInTriangle(self,'Test16',x_offset+3,y_offset+3,0,triangle,self.res[15])
         

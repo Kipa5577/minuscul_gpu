@@ -205,54 +205,72 @@ def render_frame(rotation_angle, camera_pos, camera_target, up_dir,light_dir,tri
     proj_matrix = create_perspective_matrix(60.0,WIDTH/HEIGHT,0.1,100.0)
     mvp = proj_matrix @ view_matrix @ model_matrix
 
+    # Triangle Processing & Shading
     for triangle in triangles:
 
+        # Transform all three vertices of the tringle into World Space 
         v0_world = model_matrix @ triangle[0]
         v1_world = model_matrix @ triangle[1]
         v2_world = model_matrix @ triangle[2]
 
+        # Calculate face normal using cross product of world-space edge vectors
         edge1 = v1_world[:3] - v0_world[:3]
         edge2 = v2_world[:3] - v0_world[:3]
         normal = np.cross(edge1,edge2)
+
+        # Normalize the normal vector to length 1
         norm_len = np.linalg.norm(normal)
         if norm_len == 0:
-            continue
+            continue # Skip degenerate triangles with no area/surface area
         normal = normal / norm_len
 
+        # Flat Shading (Diffuse Lighting):
+        # Calculate dot product between surface normal and light direction.
+        # Max operation enforce a ambient floor of 0.2 brightness.
         intensity = max(0.2, np.dot(normal,light_dir))
+
+        # Multiply base RGB color by light intensity
         shaded_color = (np.array(triangle[3])*intensity).astype(np.uint8)
 
+        #Vertex Projection & SCREEN-SPACE MAPPING
+        #Transform 3D Vertices into Clip Space using MVP matrix
         p1 = mvp @ triangle[0]
         p2 = mvp @ triangle[1]
         p3 = mvp @ triangle[2]
 
         pts,depths = [], []
         for p in [p1, p2, p3]:
+            # Simple near-plane clipping chech(W<=0is behind camera)
             if p[3] <= 0:
-                continue 
+                continue
+            # Perspective Divide: Transform from Clip  Space to Normalized Device Coordinates (NDC) [-1,1]
+            # then map NDC space [-1,1] to 2D Screen Space pixels [0,WIDTH] and [0,HEIGHT].
             x_scr = (((p[0]/p[3])*0.5)+0.5)*WIDTH
             y_scr = (1.0 - ((p[1]/p[3])*0.5 +0.5))*HEIGHT
             pts.append([x_scr, y_scr])
-            depths.append(p[2]/p[3])
+            depths.append(p[2]/p[3]) #Normalized depth
 
+        # if any vertex was behind the near-plane, discard the triangle
         if len(pts) < 3:
             continue
 
         p1_scr, p2_scr, p3_scr = pts[0], pts[1], pts[2]
 
-        # Restricting the rendering zone
+        # BOUNDING BOX COMPUTATION & SCREEN CLAMPING 
+        # Find raw screen-space 2D bounding box containing the triangle 
         xmin = math.floor(min(p1_scr[0],p2_scr[0],p3_scr[0]))
         xmax = math.floor(max(p1_scr[0],p2_scr[0],p3_scr[0]))
         ymin = math.floor(min(p1_scr[1],p2_scr[1],p3_scr[1]))
         ymax = math.floor(max(p1_scr[1],p2_scr[1],p3_scr[1])) 
 
         print(f"xmin:{xmin} |xmax{xmax} |ymin{ymin} |ymax{ymax}")
-        # Clamping bounding boxes 
+        # Clamp bounding box coordinates so they don't fall outside of the screen
         xmax = int(min(WIDTH,xmax))
         xmin = int(max(0,xmin))
         ymax = int(min(HEIGHT,ymax))
         ymin = int(max(0,ymin))
 
+        # Calculate double the signed are of the triangle in 2D screen space
         area = sign(p1_scr,p2_scr,p3_scr)
         if area == 0: ##skiping degenerate triangles
             continue 
