@@ -1,22 +1,20 @@
 import py4hw
 
 """
-The triangles are going to be stored in memory the folowing way 
-V1
-V2
-V3
-COLOR
+Triangles are stored one per 512-bit memory line: V1X V1Y V1Z V2X V2Y V2Z
+V3X V3Y V3Z COLOR, each a 32-bit two's-complement field (see
+pack_triangle_line/unpack_triangle_line in rasteriser/renderer.py).
 """
 
 class MemoryInterface(py4hw.Interface):
-    def __init__(self,parent,name,memory_size: int):
+    def __init__(self,parent,name,memory_size: int,data_width: int = 32):
         super().__init__(parent, name)
 
         self.read = self.addSourceToSink('read',1)
         self.write = self.addSourceToSink('write',1)
-        self.address = self.addSourceToSink('address',1)
-        self.read_data = self.addSinkToSource('read_data',32)
-        self.write_data = self.addSourceToSink('write_data',32)
+        self.address = self.addSourceToSink('address',32)
+        self.read_data = self.addSinkToSource('read_data',data_width)
+        self.write_data = self.addSourceToSink('write_data',data_width)
         self.done = self.addSourceToSink('done',1)
 
 
@@ -61,16 +59,16 @@ class MatrixInfo4X4(py4hw.Interface):
         
 
 class Memory(py4hw.Logic):
-    def __init__(self,parent,name,mem:MemoryInterface):
+    def __init__(self,parent,name,mem:MemoryInterface,memory_size:int):
         super().__init__(parent, name)
         self.mem =  self.addInterfaceSink('mem',mem)
-        memory = [0]*(2**32)
+        self.memory = [0]*memory_size
 
     def clock(self):
         address =  self.mem.address.get()
         #read
         if (self.mem.read.get() == 1) and (self.mem.write.get() == 0):
-            self.mem.read_data.prepare(self.memory[address])  
+            self.mem.read_data.prepare(self.memory[address])
             self.mem.done.prepare(1)
         elif (self.mem.read.get() == 0) and (self.mem.write.get() == 1 ):
             val  = self.mem.write_data.get()
